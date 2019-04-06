@@ -7,7 +7,6 @@ RUN apk add --update \
     build-base \
   && pip install virtualenv
 
-RUN pip install pandas
 RUN pip install requests
 
 RUN /bin/sh -c "mkdir /salamander_gerrymander"
