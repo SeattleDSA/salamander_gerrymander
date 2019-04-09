@@ -195,8 +195,17 @@ def getRowAddressInfo(row):
   response = urllib2.urlopen(url)
   response_html = response.read()
   response_json = json.loads(response_html)
+
+  if len(response_json['result']['addressMatches']) == 0:
+    return ret
+
   result = response_json['result']['addressMatches'][0]
+ 
+  if len(result['geographies']['Census Blocks']) == 0:
+    return ret
+  
   census_block = result['geographies']['Census Blocks'][0]
+         
   if result['addressComponents']['city'] == 'SEATTLE':
     ret['in_seattle'] = True
     ret['council_district'] = getDistrict(census_block['TRACT'], census_block['BLKGRP'], census_block['BLOCK'])
@@ -219,29 +228,28 @@ def addDistrictInfo(records):
   url = 'https://geocoding.geo.census.gov/geocoder/geographies/addressbatch'
 
   csv_addr = StringIO.StringIO()
-  csv_writer = csv.writer(csv_addr)
+  csv_writer = csv.writer(csv_addr, quoting=csv.QUOTE_ALL)
 
   addr_headers = ['Address_Line_1','City','State','Zip']
-  csv_writer.writerow(addr_headers)
-
-  for record in records:
-    new_record = []
+  
+  for i, record in enumerate(records):
+    new_record = [i]
     for attr in addr_headers:
       if attr == 'Zip':
         new_record.append(record[attr][:5])
       else:
         new_record.append(record[attr])
     csv_writer.writerow(new_record)
-
+    
   resp = requests.post(url, files = {
-    'addressFile': ('addresses.csv', csv_addr.getvalue())
+    'addressFile': ('addresses.csv', csv_addr.getvalue().strip())
   }, data = {
     'benchmark': 'Public_AR_Census2010',
     'vintage': 'Census2010_Census2010',
   })
 
   csv_addr.close()
-
+  
   reader = csv.reader(resp.iter_lines())
 
   new_records = [record for record in records]
@@ -255,7 +263,9 @@ def addDistrictInfo(records):
       if 'SEATTLE, WA' in row[4]:
         ret['in_seattle'] = True
         ret['council_district'] = getDistrict(row[-2], row[-1][0], row[-1])
+        
       z = row[4][-5:]
+      
       if isEastsideZip(z):
         ret['is_eastside'] = True
       if isSouthKingZip(z):
@@ -265,11 +275,11 @@ def addDistrictInfo(records):
       ret['geolocated_address'] = True
     # Census fetch returned 2+ equally "likely" canonical addresses. Fallback to single-row fetch.
     elif row[2] == 'Tie':
-      ret = getRowAddressInfo(df.loc[index])
-
+      ret = getRowAddressInfo(records[i])
+      
     for attr, value in ret.iteritems():
       new_records[i][attr] = value
-
+      
   return new_records, addr_headers
 
 def combineDfsByIndex(host, guest):
