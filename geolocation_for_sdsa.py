@@ -1,5 +1,22 @@
 # -*- coding: utf-8 -*-
 
+#
+# Geolocated, but with no flag or district:
+#
+#   North Bend
+#   Mercer Island
+#   Vashon
+#
+
+# TODO
+#
+#  - allow a manual override of district or boolean location fields in nation builder,
+#    ensure subsequent imports don't overwrite (maybe with a manual_override boolean field?)
+#  - turn this into a simple webapp so anyone can upload a csv
+#    (this is where the nationbuilder API comes in)
+
+
+
 #@title Imports and authorize
 import urllib, urllib2, json, sys, csv, requests
 import StringIO
@@ -231,16 +248,20 @@ def addDistrictInfo(records):
   csv_writer = csv.writer(csv_addr, quoting=csv.QUOTE_ALL)
 
   addr_headers = ['Address_Line_1','City','State','Zip']
+
+  id_to_original_row = {}
   
   for i, record in enumerate(records):
     new_record = [i]
+    id_to_original_row[i] = record
+    
     for attr in addr_headers:
       if attr == 'Zip':
         new_record.append(record[attr][:5])
       else:
         new_record.append(record[attr])
     csv_writer.writerow(new_record)
-    
+  
   resp = requests.post(url, files = {
     'addressFile': ('addresses.csv', csv_addr.getvalue().strip())
   }, data = {
@@ -249,13 +270,20 @@ def addDistrictInfo(records):
   })
 
   csv_addr.close()
-  
+
+#  sorted_resp = sorted([line for line in resp.iter_lines()], key=lambda record: record[0])
+
+#  reader = csv.reader(sorted_resp)
   reader = csv.reader(resp.iter_lines())
 
   new_records = [record for record in records]
 
   # Parse response.
   for i, row in enumerate(reader):
+    id = int(row[0])
+
+    original_record = id_to_original_row[id]    
+
     ret = getEmptyAddressInfo()
 
     # Census fetch successful
@@ -278,7 +306,9 @@ def addDistrictInfo(records):
       ret = getRowAddressInfo(records[i])
       
     for attr, value in ret.iteritems():
-      new_records[i][attr] = value
+      if attr not in addr_headers:
+        addr_headers += [attr]
+      original_record[attr] = value
       
   return new_records, addr_headers
 
@@ -292,14 +322,18 @@ def combineDfsByIndex(host, guest):
       host.loc[index,col_name] = col_val
 
 records_with_geocoding, addr_headers = addDistrictInfo(records)
+headers_including_addr = headers + addr_headers
+
+print("addr_headers")
+print(addr_headers)
 
 output_csv = input_csv.replace(".csv", " with districts.csv")
 
 with open(output_csv, 'wb') as output:
   output_writer = csv.writer(output)
-  output_writer.writerow(headers + addr_headers)
+  output_writer.writerow(headers_including_addr)
   for record in records_with_geocoding:
-    values = [record[header] for header in headers]
+    values = [record.get(header) for header in headers_including_addr]
     output_writer.writerow(values)
 
 
