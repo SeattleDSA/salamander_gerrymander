@@ -324,9 +324,6 @@ def combineDfsByIndex(host, guest):
 records_with_geocoding, addr_headers = addDistrictInfo(records)
 headers_including_addr = headers + addr_headers
 
-print("addr_headers")
-print(addr_headers)
-
 output_csv = input_csv.replace(".csv", " with districts.csv")
 
 with open(output_csv, 'wb') as output:
