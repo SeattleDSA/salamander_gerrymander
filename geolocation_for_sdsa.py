@@ -18,7 +18,7 @@
 
 
 #@title Imports and authorize
-import urllib, urllib2, json, sys, csv, requests
+import urllib, urllib2, json, sys, csv, requests, collections, re
 import StringIO
 
 #@title Get member data
@@ -321,13 +321,51 @@ def combineDfsByIndex(host, guest):
       col_val = col[1]
       host.loc[index,col_name] = col_val
 
-records_with_geocoding, addr_headers = addDistrictInfo(records)
+def fixPhoneNumbers(records):
+   return [fixPhoneNumbersForRecord(record) for record in records]
+
+PHONE_NUMBER_FIELDS = ['Mobile_Phone', 'Home_Phone', 'Work_Phone']
+
+def fixPhoneNumbersForRecord(record):
+   combined_phones_str = record['Mobile_Phone'] + "," + record['Home_Phone'] + "," + record['Work_Phone']
+   phone_numbers = [cleanPhoneNumber(number) for number in [part.strip() for part in combined_phones_str.split(",")] if len(number) > 0][0:3]
+
+   unique_phone_numbers_dict = collections.OrderedDict()
+
+   for number in phone_numbers:
+      unique_phone_numbers_dict[number] = True
+
+   unique_phone_numbers = unique_phone_numbers_dict.keys()
+      
+   new_record = { attr: value for (attr, value) in record.items() }
+
+   if len(unique_phone_numbers) >= 1:
+      new_record['Mobile_Phone'] = unique_phone_numbers[0]
+   else:
+      new_record['Mobile_Phone'] = ""
+
+   if len(unique_phone_numbers) >= 2:
+      new_record['Home_Phone'] = unique_phone_numbers[1]
+   else:
+      new_record['Home_Phone'] = ""
+
+   if len(unique_phone_numbers) >= 3:
+      new_record['Work_Phone'] = unique_phone_numbers[2]
+   else:
+      new_record['Work_Phone'] = ""
+      
+   return new_record
+
+def cleanPhoneNumber(number):
+   return re.sub(r"[^\d]", "", number)
+
+records_with_geocoding, addr_headers = addDistrictInfo(fixPhoneNumbers(records))
 headers_including_addr = headers + addr_headers
 
 output_csv = input_csv.replace(".csv", " with districts.csv")
 
 with open(output_csv, 'wb') as output:
-  output_writer = csv.writer(output)
+  output_writer = csv.writer(output, quoting=csv.QUOTE_ALL)
   output_writer.writerow(headers_including_addr)
   for record in records_with_geocoding:
     values = [record.get(header) for header in headers_including_addr]
